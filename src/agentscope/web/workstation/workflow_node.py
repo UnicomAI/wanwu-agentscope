@@ -3707,9 +3707,9 @@ class FileParseNode(WorkflowNode):
         if response.status == service_status.ServiceExecStatus.ERROR:
             self.log_error(f"workflow: {self.workflow_id}, 文件解析服务错误: {str(response.content)}")
             raise Exception(f"文件解析服务错误: {str(response.content)}")
-        if response.content['code'] >= 400:
-            self.log_error(f"workflow: {self.workflow_id}, 文件解析服务错误: {str(response.content)}")
-            raise Exception(f"文件解析服务错误: {str(response.content)}")
+        # if response.content['code'] >= 400:
+        #     self.log_error(f"workflow: {self.workflow_id}, 文件解析服务错误: {str(response.content)}")
+        #     raise Exception(f"文件解析服务错误: {str(response.content)}")
         # 3. 拆包解析
         self.log_info(f"workflow: {self.workflow_id}, 文件解析输出为:{str(response.content)}")
         self.output_params = self.convert_file_parse_response(response.content)
@@ -3749,7 +3749,7 @@ class FileParseNode(WorkflowNode):
 
     @staticmethod
     def convert_file_parse_response(origin_params_dict: dict) -> dict:
-        content = origin_params_dict["text"]
+        content = json.dumps(origin_params_dict)
         updated_params_dict = {'text': content}
         return updated_params_dict
 

@@ -3692,9 +3692,11 @@ class FileParseNode(WorkflowNode):
             self.input_params_for_body |= param_one_dict_for_body
 
         # 节点参数校验
-        url = self.input_params_for_body.get('url', None)
+        url = self.input_params_for_body.get('upload_file_url', None)
         if not url:
             raise Exception("文件链接为空")
+
+        self.input_params_for_body["upload_file_url"] = [url]
 
         if 'headers' not in params_dict['settings']:
             raise Exception("headers key not found in settings")
@@ -3705,9 +3707,9 @@ class FileParseNode(WorkflowNode):
         if response.status == service_status.ServiceExecStatus.ERROR:
             self.log_error(f"workflow: {self.workflow_id}, 文件解析服务错误: {str(response.content)}")
             raise Exception(f"文件解析服务错误: {str(response.content)}")
-        if response.content['code'] >= 400:
-            self.log_error(f"workflow: {self.workflow_id}, 文件解析服务错误: {str(response.content)}")
-            raise Exception(f"文件解析服务错误: {str(response.content)}")
+        # if response.content['code'] >= 400:
+        #     self.log_error(f"workflow: {self.workflow_id}, 文件解析服务错误: {str(response.content)}")
+        #     raise Exception(f"文件解析服务错误: {str(response.content)}")
         # 3. 拆包解析
         self.log_info(f"workflow: {self.workflow_id}, 文件解析输出为:{str(response.content)}")
         self.output_params = self.convert_file_parse_response(response.content)
@@ -3739,7 +3741,7 @@ class FileParseNode(WorkflowNode):
         if 'inputs' in origin_params_dict:
             for item in origin_params_dict['inputs']:
                 if item['name'] == 'file_url':
-                    item['name'] = 'url'
+                    item['name'] = 'upload_file_url'
         else:
             raise KeyError("Missing 'inputs' in origin_params_dict")
 
@@ -3747,7 +3749,7 @@ class FileParseNode(WorkflowNode):
 
     @staticmethod
     def convert_file_parse_response(origin_params_dict: dict) -> dict:
-        content = origin_params_dict["docs"]
+        content = json.dumps(origin_params_dict, ensure_ascii=False)
         updated_params_dict = {'text': content}
         return updated_params_dict
 

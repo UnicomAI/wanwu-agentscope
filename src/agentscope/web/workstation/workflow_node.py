@@ -3749,7 +3749,10 @@ class FileParseNode(WorkflowNode):
 
     @staticmethod
     def convert_file_parse_response(origin_params_dict: dict) -> dict:
-        content = json.dumps(origin_params_dict)
+        for parse_result in origin_params_dict:
+            parse_result
+
+        content = json.dumps(origin_params_dict, ensure_ascii=False)
         updated_params_dict = {'text': content}
         return updated_params_dict
 

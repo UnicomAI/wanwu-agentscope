@@ -8,16 +8,11 @@
 
 ```bash
 # 从 GitHub 拉取源代码
-git clone https://github.com/UnicomAI/uni-agentscope.git
+git clone https://github.com/UnicomAI/wanwu-agentscope.git
 
 # 以编辑模式安装
-cd uni-agentscope
+cd wanwu-agentscope
 pip install -e .
-pip install pypinyin pymysql redis
-python3 /agentscope/src/agentscope/aibigmodel_workflow/app.py
-```
-
-## Docker安装
-```bash
-
+pip install pypinyin pymysql redis objgraph pympler mcp
+python3 ./src/agentscope/aibigmodel_workflow/app.py
 ```

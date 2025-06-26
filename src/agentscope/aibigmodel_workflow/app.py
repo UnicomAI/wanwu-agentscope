@@ -763,6 +763,7 @@ def workflow_example_clone() -> Response:
         else:
             name_suffix = utils.add_max_suffix(config_en_name, workflow_results)
             # 生成新的配置名称
+            config_name = f"{config_name}{name_suffix}"
             new_config_en_name = f"{config_en_name}_{name_suffix}"
             response = service.workflow_example_clone(workflow_id, org_id, user_id, config_name, new_config_en_name,
                                                       config_desc, tenant_id)

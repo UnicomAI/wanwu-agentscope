@@ -831,3 +831,19 @@ def generate_stream(dag_id: str, queue_id: str):
         yield f"{str(e)}\n\n"
     finally:
         redis_queue.delete_queue(queue_id, dag_id=dag_id)  # 确保队列被清理
+
+def extract_start_node(dag):
+    """
+    从 DAG 结构中提取起始节点（name="开始" 且 type="StartNode"）
+    
+    参数:
+        dag (dict): 完整的 DAG JSON 结构
+        
+    返回:
+        dict: 起始节点信息，若未找到返回 None
+    """
+    for node in dag.get("nodes", []):
+        # 检查节点是否符合条件 [6,8](@ref)
+        if node.get("name") == "开始" and node.get("type") == "StartNode":
+            return node
+    return None

@@ -424,6 +424,11 @@ def workflow_get_parameter() -> tuple[Response, int] | Response:
     dag_content = json.loads(workflow_result.dag_content)
     start_node_info = utils.extract_start_node(dag_content)
 
+    workflowName = workflow_result.config_name
+    # 为start_node_info添加workflowName属性
+    if start_node_info:
+        start_node_info["workflowName"] = workflowName
+
     return jsonify(
         {
             "code": 0,

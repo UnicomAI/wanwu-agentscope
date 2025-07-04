@@ -407,7 +407,7 @@ def node_run_python() -> Response:
 def workflow_get_parameter() -> tuple[Response, int] | Response:
     """
     """
-    workflow_id = request.json.get("workflowID")
+    workflow_id = request.args.get('workflowID')
     if workflow_id == "":
         return jsonify({"code": 7, "msg": f"workflowID is Null"})
 

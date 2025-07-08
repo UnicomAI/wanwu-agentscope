@@ -402,6 +402,66 @@ def node_run_python() -> Response:
 
     return jsonify(code=0, data=nodes_result[0]["outputs"])
 
+# 根据工作流id获取其开始节点信息（主要为了获取workflow的输入参数定义）
+@app.route("/workflow/parameter", methods=["GET"])
+def workflow_get_parameter() -> tuple[Response, int] | Response:
+    """
+    """
+    workflow_id = request.args.get('workflowID')
+    if workflow_id == "":
+        return jsonify({"code": 7, "msg": f"workflowID is Null"})
+
+    # 查询workflow_info表获取插件信息
+    workflow_result = database.fetch_records_by_filters(_WorkflowTable,
+                                                        id=workflow_id)
+    
+    if not workflow_result:
+        return jsonify({"code": 7, "msg": "No workflow config data exists"})
+    
+    if not workflow_result.dag_content:
+        return jsonify({"code": 7, "msg": "No workflow dag content exists"})
+    
+    dag_content = json.loads(workflow_result.dag_content)
+    start_node_info = utils.extract_start_node(dag_content)
+
+    workflowName = workflow_result.config_name
+    # 为start_node_info添加workflowName属性
+    if start_node_info:
+        start_node_info["workflowName"] = workflowName
+
+    return jsonify(
+        {
+            "code": 0,
+            "data": start_node_info,
+            "msg": ""
+        },
+    )
+
+# 工作流发布成公开应用之后，试用
+@app.route("/workflow/use", methods=["POST"])
+def workflow_use() -> Response:
+    """
+    Input query data and get response.
+    """
+    content = request.json.get("data")
+    if not isinstance(content, dict):
+        return jsonify({"code": 7, "msg": f"input param type is {type(content)}, not dict"})
+
+    workflow_id = request.json.get("workflowID")
+    if workflow_id == "":
+        return jsonify({"code": 7, "msg": f"workflowID is Null"})
+
+    # 查询workflow_info表获取插件信息
+    workflow_result = database.fetch_records_by_filters(_WorkflowTable,
+                                                        id=workflow_id)
+    if not workflow_result:
+        return jsonify({"code": 7, "msg": "No workflow config data exists"})
+    
+    workflow_schema = json.loads(workflow_result.dag_content)
+
+    result = service.workflow_run(workflow_id, workflow_result, workflow_schema, content)
+
+    return result
 
 # 画布中的workflow，调试运行
 @app.route("/workflow/run", methods=["POST"])

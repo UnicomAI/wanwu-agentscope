@@ -138,10 +138,11 @@ def plugin_publish() -> Response:
         return jsonify({"code": 7, "msg": "不支持的云类型"})
 
     # 插件的英文名称唯一
-    if len(plugin) > 0:
+    if len(plugin) > 1:
         return jsonify(
             {"code": 7, "msg": f"发现多个相同英文名称的插件，请确保唯一性: {workflow_result.config_en_name}"})
-
+    if len(plugin) == 1:
+        return jsonify({"code": 0, "msg": "Workflow file published successfully"})
     result = service.plugin_publish(workflow_id,org_id, user_id, workflow_result, plugin_field, description, jwt_token,
                                     workflow_result.is_stream)
 

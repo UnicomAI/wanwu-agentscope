@@ -984,7 +984,7 @@ def workflow_get_list() -> tuple[Response, int] | Response:
     """
     cloud_type = auth.get_cloud_type()
     page = request.args.get('pageNo', default=1)
-    limit = request.args.get('pageSize', default=10)
+    limit = request.args.get('pageSize', default=10000)
     keyword = request.args.get('keyword', default='')
     status = request.args.get('status', default='')
     is_stream = request.args.get('isStream', default='')

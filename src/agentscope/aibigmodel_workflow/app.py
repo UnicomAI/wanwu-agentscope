@@ -138,11 +138,59 @@ def plugin_publish() -> Response:
         return jsonify({"code": 7, "msg": "不支持的云类型"})
 
     # 插件的英文名称唯一
-    if len(plugin) > 0:
+    if len(plugin) > 1:
+        return jsonify(
+            {"code": 7, "msg": f"发现多个相同英文名称的插件，请确保唯一性: {workflow_result.config_en_name}"})
+    if len(plugin) == 1:
+        return jsonify({"code": 0, "msg": "Workflow file published successfully"})
+    result = service.plugin_publish(workflow_id,org_id, user_id, workflow_result, plugin_field, description, jwt_token,
+                                    workflow_result.is_stream)
+
+    return result
+
+
+# 取消发布调试成功的workflow
+@app.route("/plugin/api/unpublish", methods=["POST"])
+def plugin_unpublish() -> Response:
+    workflow_id = request.json.get("workflowID")
+    plugin_field = request.json.get("pluginField")
+    description = request.json.get("pluginQuestionExample")
+    jwt_token = request.headers.get('Authorization')
+    user_id = auth.get_user_id()
+    org_id = auth.get_org_id()
+    tenant_ids = auth.get_tenant_ids()
+    cloud_type = auth.get_cloud_type()
+    # 查询workflow_info表获取插件信息
+    workflow_result = database.fetch_records_by_filters(_WorkflowTable,
+                                                        id=workflow_id)
+
+    if not workflow_result:
+        return jsonify({"code": 7, "msg": "No workflow config data exists"})
+
+    # if workflow_result.execute_status != WorkflowNodeStatus.SUCCESS:
+    #     return jsonify({"code": 7, "msg": "插件未调试成功，无法发布"})
+
+    # 插件名称不允许重复
+    if cloud_type == SIMPLE_CLOUD:
+        plugin = database.fetch_records_by_filters(_PluginTable,
+                                                   method='all',
+                                                   user_id=user_id,
+                                                   org_id=org_id,
+                                                   plugin_en_name=workflow_result.config_en_name)
+    elif cloud_type == PRIVATE_CLOUD:
+        plugin = database.fetch_records_by_filters(_PluginTable,
+                                                   method='all',
+                                                   tenant_id__in=tenant_ids,
+                                                   plugin_en_name=workflow_result.config_en_name)
+    else:
+        return jsonify({"code": 7, "msg": "不支持的云类型"})
+
+    # 插件的英文名称唯一
+    if len(plugin) > 1:
         return jsonify(
             {"code": 7, "msg": f"发现多个相同英文名称的插件，请确保唯一性: {workflow_result.config_en_name}"})
 
-    result = service.plugin_publish(workflow_id,org_id, user_id, workflow_result, plugin_field, description, jwt_token,
+    result = service.plugin_unpublish(workflow_id,org_id, user_id, workflow_result, plugin_field, description, jwt_token,
                                     workflow_result.is_stream)
 
     return result
@@ -936,7 +984,7 @@ def workflow_get_list() -> tuple[Response, int] | Response:
     """
     cloud_type = auth.get_cloud_type()
     page = request.args.get('pageNo', default=1)
-    limit = request.args.get('pageSize', default=10)
+    limit = request.args.get('pageSize', default=10000)
     keyword = request.args.get('keyword', default='')
     status = request.args.get('status', default='')
     is_stream = request.args.get('isStream', default='')

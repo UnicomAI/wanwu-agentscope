@@ -30,7 +30,7 @@ from sqlalchemy import or_, and_
 def plugin_publish(workflow_id, org_id,user_id, workflow_result, plugin_field, description, jwt_token, is_stream):
     # 插件描述信息生成，对接智能体格式
     dag_content = json.loads(workflow_result.dag_content)
-
+    cloud_type = auth.get_cloud_type()
     data = {
         "id": workflow_id,
         "pluginName": workflow_result.config_name,
@@ -98,6 +98,59 @@ def plugin_publish(workflow_id, org_id,user_id, workflow_result, plugin_field, d
 
     return jsonify({"code": 0, "msg": "Workflow file published successfully"})
 
+def plugin_unpublish(workflow_id, org_id,user_id, workflow_result, plugin_field, description, jwt_token, is_stream):
+    # 插件描述信息生成，对接智能体格式
+    dag_content = json.loads(workflow_result.dag_content)
+    cloud_type = auth.get_cloud_type()
+    data = {
+        "id": workflow_id,
+        "pluginName": workflow_result.config_name,
+        "pluginDesc": workflow_result.config_desc,
+        "pluginENName": workflow_result.config_en_name,
+        "pluginField": plugin_field,
+        "pluginDescription": description,
+        "pluginSpec": dag_content,
+        "identifier": user_id if auth.get_cloud_type() == SIMPLE_CLOUD else workflow_result.tenant_id,
+        "serviceURL": SERVICE_URL,
+        "user_id": user_id,
+        "org_id": org_id
+    }
+
+    # 检查是否存在 "GUIAgentNode" 类型的节点
+    contains_gui_agent = any(node.get("type") == "GUIAgentNode" for node in dag_content["nodes"])
+
+    # 根据标志变量处理逻辑
+    if contains_gui_agent and cloud_type == SIMPLE_CLOUD:
+        openapi_schema = utils.plugin_desc_config_generator_user_defined(data)
+        openapi_schema_json_str = json.dumps(openapi_schema)
+        # 向网关注册API接口，实现用户调用API的管控
+        # response = register_openapi_plugins(workflow_id, data, jwt_token)
+        # if response.status == service_status.ServiceExecStatus.ERROR:
+        #     return jsonify({"code": 7, "msg": f"插件发布失败: 网关注册插件API服务失败"})
+
+    elif is_stream and cloud_type == SIMPLE_CLOUD:
+        openapi_schema = utils.plugin_desc_config_generator_for_stream(data)
+        openapi_schema_json_str = json.dumps(openapi_schema)
+        # 向网关注册API接口，实现用户调用API的管控
+        # response = register_openapi_plugins(workflow_id, data, jwt_token)
+        # if response.status == service_status.ServiceExecStatus.ERROR:
+        #     return jsonify({"code": 7, "msg": f"插件发布失败: 网关注册插件API服务失败"})
+    else:
+        openapi_schema = utils.plugin_desc_config_generator(data)
+        openapi_schema_json_str = json.dumps(openapi_schema)
+    try:
+        db.session.query(_PluginTable).filter_by(id=workflow_id).delete()
+        db.session.query(_WorkflowTable).filter_by(id=workflow_id).update(
+            {_WorkflowTable.status: utils.WorkflowStatus.WORKFLOW_DRAFT})
+        db.session.commit()
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        return jsonify({"code": 7, "msg": str(e)})
+    except Exception as e:
+        loghandler.logger.error(f"plugin_publish failed: {e}")
+        return jsonify({"code": 7, "msg": str(e)})
+
+    return jsonify({"code": 0, "msg": "Workflow file unpublished successfully"})
 
 def build_and_run_dag(workflow_schema, content, workflow_id, user_id):
     try:

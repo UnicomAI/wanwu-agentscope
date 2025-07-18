@@ -62,6 +62,15 @@ def api_request(
 
     for attempt in range(max_retries):
         try:
+            # 记录请求的详细信息
+            logger.info(f"HTTP Request - Attempt {attempt + 1}/{max_retries}")
+            logger.info(f"HTTP Request - Method: {method}")
+            logger.info(f"HTTP Request - URL: {url}")
+            logger.info(f"HTTP Request - Headers: {headers}")
+            logger.info(f"HTTP Request - Params: {params}")
+            logger.info(f"HTTP Request - Data: {data}")
+            logger.info(f"HTTP Request - JSON: {json}")
+            
             with requests.request(
                     method=method,
                     url=url,
@@ -75,22 +84,37 @@ def api_request(
             ) as resp:
                 resp.raise_for_status()  # Raise an error for bad responses
 
+                # 记录响应的详细信息
+                logger.info(f"HTTP Response - Status Code: {resp.status_code}")
+                logger.info(f"HTTP Response - Headers: {dict(resp.headers)}")
+                logger.info(f"HTTP Response - Content Length: {len(resp.content)}")
+                logger.info(f"HTTP Response - Raw Content: {resp.content}")
+
                 try:
                     # 尝试将响应解析为 JSON
                     content = resp.json()
+                    logger.info(f"JSON parsing successful, content type: {type(content)}")
                 except ValueError as e:
                     # 如果响应不是 JSON，返回原始文本
                     logger.error(f"Failed to parse JSON response: {str(e)}")
+                    logger.error(f"Response content that failed to parse: {resp.text}")
                     return ServiceResponse(ServiceExecStatus.ERROR, f"Invalid response format: {str(e)}")
 
                 return ServiceResponse(ServiceExecStatus.SUCCESS, content)
 
         except requests.RequestException as e:
             last_exception = e
+            logger.error(f"HTTP Request failed - Attempt {attempt + 1}/{max_retries}: {str(e)}")
+            logger.error(f"Exception type: {type(e).__name__}")
+            if hasattr(e, 'response') and e.response is not None:
+                logger.error(f"Response status code: {e.response.status_code}")
+                logger.error(f"Response content: {e.response.content[:500]}")
             if attempt < max_retries - 1:  # 如果不是最后一次重试，等待一段时间
+                logger.info(f"Retrying in {retry_delay} seconds...")
                 time.sleep(retry_delay)
             continue
 
+    logger.error(f"All {max_retries} attempts failed. Final error: {str(last_exception)}")
     return ServiceResponse(ServiceExecStatus.ERROR, str(last_exception))
 
 

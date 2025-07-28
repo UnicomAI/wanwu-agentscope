@@ -1,0 +1,20 @@
+FROM python:3.12-slim
+
+# 设置国内加速源（阿里云）
+RUN pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/ && \
+    pip config set install.trusted-host mirrors.aliyun.com
+
+WORKDIR /tmp/agentscope
+COPY . .
+
+# 安装运行依赖后，卸载agentscope包，删除agentscope代码
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -e . && \
+    pip install --no-cache-dir pypinyin pymysql redis objgraph pympler mcp && \
+    pip uninstall -y agentscope && rm -rf /tmp/agentscope
+
+ENV PYTHONPATH=/agentscope/src
+VOLUME /agentscope
+WORKDIR /agentscope
+
+CMD ["bash"]

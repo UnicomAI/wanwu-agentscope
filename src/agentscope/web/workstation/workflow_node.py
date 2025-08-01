@@ -8,6 +8,7 @@ import threading
 import time
 import traceback
 import weakref
+import jinja2
 
 from abc import ABC, abstractmethod
 from enum import IntEnum
@@ -795,7 +796,8 @@ class ASDiGraph(nx.DiGraph):
             WorkflowNodeType.FileParse,
             WorkflowNodeType.MCPClient,
             WorkflowNodeType.Intention,
-            WorkflowNodeType.Aggregation
+            WorkflowNodeType.Aggregation,
+            WorkflowNodeType.TemplateTransform
         ]:
             raise NotImplementedError(node_cls)
 
@@ -902,6 +904,7 @@ class WorkflowNodeType(IntEnum):
     MCPClient = 18
     Intention = 19
     Aggregation = 20
+    TemplateTransform = 21
 
 
 class WorkflowNode(ABC):
@@ -4623,6 +4626,166 @@ class AggregationNode(WorkflowNode):
         loghandler.logger.error(f"{self.node_type}, node: {self.node_id}, dag: {self.dag_id}, {message}")
 
 
+class TemplateTransformNode(WorkflowNode):
+    """
+    Template Transform Node.
+    """
+
+    node_type = WorkflowNodeType.TemplateTransform
+
+    def __init__(
+            self,
+            node_id: str,
+            opt_kwargs: dict,
+            source_kwargs: dict,
+            dep_opts: list,
+            dag_obj: Optional[ASDiGraph] = None,
+    ) -> None:
+        # 注意，在__init__方法中，不要调用self.log_info()，因为成员变量还未初始化，调用时有可能会有异常
+        super().__init__(node_id, opt_kwargs, source_kwargs, dep_opts)
+        # opt_kwargs 包含用户定义的节点输入变量
+        self.input_params = {}
+        self.output_params = {}
+        self.output_params_spec = {}
+        # init --> running -> success/failed:xxx
+        self.running_status = WorkflowNodeStatus.INIT
+        self.running_message = ''
+        if dag_obj is None:
+            self.dag_obj = None
+        else:
+            self.dag_obj = weakref.proxy(dag_obj)
+        self.dag_id = ""
+        if self.dag_obj is not None:
+            self.dag_id = self.dag_obj.uuid
+        
+        self.jinja2_code = ""
+    
+    def compile(self) -> dict:
+        # 检查参数格式是否正确
+        self.log_info(f"{self.var_name}, compile param: {self.opt_kwargs}")
+        params_dict = self.opt_kwargs
+
+        # 检查参数格式是否正确
+        if 'inputs' not in params_dict:
+            raise Exception("inputs key not found")
+        if 'outputs' not in params_dict:
+            raise Exception("outputs key not found")
+        if 'settings' not in params_dict:
+            raise Exception("settings key not found")
+
+        if not isinstance(params_dict['inputs'], list):
+            raise Exception(f"inputs:{params_dict['inputs']} type is not list")
+        if not isinstance(params_dict['outputs'], list):
+            raise Exception(f"outputs:{params_dict['outputs']} type is not list")
+        if not isinstance(params_dict['settings'], dict):
+            raise Exception(f"settings:{params_dict['settings']} type is not dict")
+        
+        base64_jinja2_code = params_dict['settings'].get('code', None)
+        if not base64_jinja2_code:
+            raise Exception("jinja2 code none")
+
+        isBase64 = False
+        try:
+            base64.b64encode(base64.b64decode(base64_jinja2_code)) == base64_jinja2_code
+            isBase64 = True
+        except Exception:
+            isBase64 = False
+            raise Exception("jinja2 code str not base64")
+        
+        self.jinja2_code = base64.b64decode(base64_jinja2_code).decode('utf-8')
+        if self.jinja2_code == "":
+            raise Exception("jinja2 code empty")
+        self.log_info(f"{self.var_name}, jinja2 code: {self.jinja2_code}")
+
+        return {
+            "imports": "",
+            "inits": "",
+            "execs": "",
+        }
+    
+    def __call__(self, *args, **kwargs):
+        # 判断当前节点的运行状态
+        self.running_status, is_running = self.dag_obj.confirm_current_node_running_status(self.node_id, kwargs)
+        if not is_running:
+            self.clear()
+            return {}
+        try:
+            self.run(*args, **kwargs)
+            self.running_status = WorkflowNodeStatus.SUCCESS
+            return self.output_params
+        except Exception as err:
+            exhausted_err = traceback.format_exc()
+            self.log_error(f'{exhausted_err}')
+            self.running_status = WorkflowNodeStatus.FAILED
+            self.running_message = f'{repr(err)}, trace: {exhausted_err}'
+            return {}
+        finally:
+            self.clear()
+    
+    def run(self, *args, **kwargs):
+        self.dag_obj.init_params_pool_with_running_node(self.node_id)
+
+        # 1. 建立参数映射
+        params_dict = self.opt_kwargs
+        for i, param_spec in enumerate(params_dict['inputs']):
+            # param_spec 举例
+            # {
+            #     "name": "apiKeywords",
+            #     "type": "string",
+            #     "desc": "",
+            #     "required": false,
+            #     "value": {
+            #         "type": "ref",
+            #         "content": {
+            #             "ref_node_id": "4daf0d1a33af497e9819fe515133eb5f",
+            #             "ref_var_name": "keywords"
+            #         }
+            #     },
+            #     "object_schema": null,
+            #     "list_schema": null,
+            # }
+
+            # 防御性措施
+            if param_spec.get('name', '') == '':
+                continue
+
+            param_one_dict = self.dag_obj.generate_node_param_real(param_spec)
+            self.input_params |= param_one_dict
+        self.log_info(f"{self.var_name}, input params: {self.input_params}")
+        
+        try:
+            result = jinja2.Template(self.jinja2_code).render(self.input_params)
+            self.output_params = {'output': result}
+        except Exception as e:
+            raise Exception(f"无法将渲染Jinja2模板: {str(e)}")
+
+        self.dag_obj.update_params_pool_with_running_node(self.node_id, self.output_params)
+        self.log_info(f"{self.var_name}, run success, input params: {self.input_params}, output params: {self.output_params}")
+        return self.output_params
+    
+    def clear(self):
+        """
+        避免循环引用风险.
+        """
+        self.dag_obj = None
+        self.dep_opts = None
+        self.dep_vars = None
+    
+    def log_info(self, message: str):
+        """
+        记录日志
+        :param message: 日志消息
+        """
+        loghandler.logger.info(f"{self.node_type}, node: {self.node_id}, dag: {self.dag_id}, {message}")
+
+    def log_error(self, message: str):
+        """
+        记录错误日志
+        :param message: 错误消息
+        """
+        loghandler.logger.error(f"{self.node_type}, node: {self.node_id}, dag: {self.dag_id}, {message}")
+
+
 NODE_NAME_MAPPING = {
     # 自定义节点
     "StartNode": StartNode,
@@ -4639,7 +4802,8 @@ NODE_NAME_MAPPING = {
     "FileParseNode": FileParseNode,
     "MCPClientNode": MCPClientNode,
     "IntentionNode": IntentionNode,
-    "AggregationNode": AggregationNode
+    "AggregationNode": AggregationNode,
+    "TemplateTransformNode": TemplateTransformNode
 }
 
 

@@ -3024,8 +3024,8 @@ class RAGNode(WorkflowNode):
         if not (0 <= threshold <= 1):
             raise Exception("过滤阈值参数错误，应该在[0,1]之间")
         top_k = self.input_params_for_body.get('top_k', None)
-        if not (0 <= top_k <= 10):
-            raise Exception("选取知识条数参数错误，应该在[0,10]之间")
+        if not (0 <= top_k <= 20):
+            raise Exception("选取知识条数参数错误，应该在[0,20]之间")
         question = self.input_params_for_body.get('question', None)
         if not question:
             raise Exception("RAG节点问题为空,请填写问题")
@@ -3037,6 +3037,8 @@ class RAGNode(WorkflowNode):
         self.input_params_for_body['knowledgeBase'] = self.knowledgeBase
         self.input_params_for_body['userId'] = self.userId
         self.input_params_for_body['rerank_model_id'] = self.rerank_model_id
+        # 需要返回meta信息
+        self.input_params_for_body["return_meta"] = True,
 
         # 适配知识库接口
         if 'top_k' in self.input_params_for_body:
